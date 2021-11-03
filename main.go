@@ -18,24 +18,15 @@ func main() {
 	buildInstances := getBuildInstances(nil)
 	plan := getValue(buildInstances)
 
-	plan.Walk(func(v cue.Value) bool {
-		fmt.Printf("%s -> %s\n", v.Path(), v.Kind())
-		if v.IsConcrete() && fmt.Sprint(v.Kind()) == "string" {
-			// fmt.Printf("%s\n", v.Value())
-			filename := v.Source().Pos().File().Name()
-			match, _ := regexp.MatchString("cue.mod/(pkg|usr)", filename)
-			if match {
-				fmt.Printf("CANNOT SET CONCRETE VALUE IN PACKAGE %s\n", filename)
-			} else {
-				fmt.Printf("%s\n", v.Value())
-			}
-		} else if v.Kind() == cue.BottomKind {
-			_, defaultExisted := v.Default()
-			filename := v.Source().Pos().File().Name()
-			match, _ := regexp.MatchString("cue.mod/(pkg|usr)", filename)
-			if defaultExisted && match {
-				fmt.Printf("CANNOT SET DEFAULT VALUE IN PACKAGE %s\n", filename)
-			}
+	context := plan.LookupPath(cue.ParsePath("context"))
+
+	context.Walk(func(contextField cue.Value) bool {
+
+		fmt.Printf("%s -> %s\n", contextField.Path(), contextField.IncompleteKind())
+
+		sources := contextField.Split()
+		for _, src := range sources {
+			fmt.Printf("%s -> %+v\n", src.Source().Pos().Filename(), src.IsConcrete())
 		}
 		return true
 	}, nil)
@@ -57,7 +48,7 @@ func getBuildInstances(args []string) []*build.Instance {
 	}
 
 	if len(args) < 1 {
-		args = append(args, "./")
+		args = append(args, "./plans/dev")
 	}
 
 	buildInstances := load.Instances(args, &config)
@@ -74,4 +65,26 @@ func getValue(buildInstances []*build.Instance) cue.Value {
 		os.Exit(1)
 	}
 	return values[0]
+}
+
+func setByPackage(v cue.Value) bool {
+	fmt.Printf("%s -> %s\n", v.Path(), v.Kind())
+	if v.IsConcrete() && fmt.Sprint(v.Kind()) == "string" {
+		// fmt.Printf("%s\n", v.Value())
+		filename := v.Source().Pos().File().Name()
+		match, _ := regexp.MatchString("cue.mod/(pkg|usr)", filename)
+		if match {
+			fmt.Printf("CANNOT SET CONCRETE VALUE IN PACKAGE %s\n", filename)
+		} else {
+			fmt.Printf("%s\n", v.Value())
+		}
+	} else if v.Kind() == cue.BottomKind {
+		_, defaultExisted := v.Default()
+		filename := v.Source().Pos().File().Name()
+		match, _ := regexp.MatchString("cue.mod/(pkg|usr)", filename)
+		if defaultExisted && match {
+			fmt.Printf("CANNOT SET DEFAULT VALUE IN PACKAGE %s\n", filename)
+		}
+	}
+	return true
 }
