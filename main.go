@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"regexp"
+	"path/filepath"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/ast"
@@ -13,32 +13,38 @@ import (
 	"cuelang.org/go/cue/parser"
 )
 
+// this will take the path at arg[1] and look for cue.mod in parent directories recursively
+
 func main() {
 
-	buildInstances := getBuildInstances(nil)
-	plan := getValue(buildInstances)
+	var cwd, projectRoot string
 
-	plan.Walk(func(v cue.Value) bool {
-		fmt.Printf("%s -> %s\n", v.Path(), v.Kind())
-		if v.IsConcrete() && fmt.Sprint(v.Kind()) == "string" {
-			// fmt.Printf("%s\n", v.Value())
-			filename := v.Source().Pos().File().Name()
-			match, _ := regexp.MatchString("cue.mod/(pkg|usr)", filename)
-			if match {
-				fmt.Printf("CANNOT SET CONCRETE VALUE IN PACKAGE %s\n", filename)
-			} else {
-				fmt.Printf("%s\n", v.Value())
-			}
-		} else if v.Kind() == cue.BottomKind {
-			_, defaultExisted := v.Default()
-			filename := v.Source().Pos().File().Name()
-			match, _ := regexp.MatchString("cue.mod/(pkg|usr)", filename)
-			if defaultExisted && match {
-				fmt.Printf("CANNOT SET DEFAULT VALUE IN PACKAGE %s\n", filename)
-			}
+	if len(os.Args) > 1 {
+		cwd = os.Args[1]
+	} else {
+		cwd = "./"
+	}
+
+	path, _ := filepath.Abs(cwd)
+
+	// traverse the directory tree starting from PWD going up to successive parents
+	for {
+		// look for the cue.mod filder
+		if _, err := os.Stat(path + "/cue.mod"); !os.IsNotExist(err) {
+			projectRoot = path
+			break // found it!
 		}
-		return true
-	}, nil)
+		path, _ = filepath.Abs(filepath.Dir(path))
+		if path == string(os.PathSeparator) {
+			break
+		}
+	}
+
+	if projectRoot == "" {
+		fmt.Println("Cannot determine project root. No cue.mod found.")
+	}
+
+	fmt.Printf("%s", projectRoot)
 
 }
 
